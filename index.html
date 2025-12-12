@@ -10,6 +10,9 @@
 
     <title>SplitSync</title>
 
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="manifest.json">
+
     <!-- Icons -->
     <link rel="icon" type="image/png" href="favicon.png">
     <link rel="apple-touch-icon" href="icon-192.png">
@@ -426,8 +429,8 @@
         <div class="modal-sheet" id="add-sheet-content" onclick="event.stopPropagation()">
             
             <div class="toggle-container" id="mode-toggle">
-                <div id="tab-burn" class="toggle-btn active burn" onclick="setMode('burn')">Expense</div>
-                <div id="tab-fuel" class="toggle-btn" onclick="setMode('fuel')">Contribution</div>
+                <div id="tab-burn" class="toggle-btn active burn" onclick="setMode('burn')">Expense (Burn)</div>
+                <div id="tab-fuel" class="toggle-btn" onclick="setMode('fuel')">Contribution (Fuel)</div>
             </div>
 
             <!-- Date Field (Shared) -->
@@ -534,6 +537,20 @@
             </p>
         </div>
     </div>
+
+    <!-- SERVICE WORKER REGISTRATION -->
+    <script>
+      if ('serviceWorker' in navigator) {
+        // Guard against non-http protocols (e.g. blob: in preview environments)
+        if (window.location.protocol.startsWith('http')) {
+            window.addEventListener('load', () => {
+              navigator.serviceWorker.register('./sw.js').catch(err => {
+                  console.warn('Service worker registration failed:', err);
+              });
+            });
+        }
+      }
+    </script>
 
     <!-- LOGIC -->
     <script type="module">
@@ -944,8 +961,8 @@
                 let d = t.txnDate ? new Date(t.txnDate) : (t.timestamp ? t.timestamp.toDate() : new Date());
                 // Fix TZ
                 if(t.txnDate) {
-                     const off = d.getTimezoneOffset() * 60000;
-                     d = new Date(d.getTime() + off);
+                     const parts = t.txnDate.split('-');
+                     d = new Date(parts[0], parts[1]-1, parts[2]); 
                 }
                 if (d < earliestDate) earliestDate = d;
                 hasHistory = true;
@@ -971,7 +988,10 @@
                 // Calc Past Paid
                 allTransactions.forEach(t => {
                     let d = t.txnDate ? new Date(t.txnDate) : (t.timestamp ? t.timestamp.toDate() : new Date());
-                    if(t.txnDate) { const off = d.getTimezoneOffset()*60000; d = new Date(d.getTime()+off); }
+                    if(t.txnDate) { 
+                        const parts = t.txnDate.split('-');
+                        d = new Date(parts[0], parts[1]-1, parts[2]); 
+                    }
                     
                     if (d < viewStart && t.type === 'fuel' && memberCarryover[t.user] !== undefined) {
                         memberCarryover[t.user] += t.amount;
@@ -990,9 +1010,8 @@
             const filtered = allTransactions.filter(t => {
                 let tDate = new Date();
                 if (t.txnDate) {
-                    tDate = new Date(t.txnDate);
-                    const offset = tDate.getTimezoneOffset() * 60000;
-                    tDate = new Date(tDate.getTime() + offset);
+                    const parts = t.txnDate.split('-');
+                    tDate = new Date(parts[0], parts[1]-1, parts[2]); 
                 } else if (t.timestamp) {
                     tDate = t.timestamp.toDate(); 
                 }
