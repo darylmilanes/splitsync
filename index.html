@@ -1,0 +1,1295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <!-- MOBILE OPTIMIZATION -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="theme-color" content="#FFFFFF"> 
+
+    <title>SplitSync</title>
+
+    <!-- Icons -->
+    <link rel="icon" type="image/png" href="favicon.png">
+    <link rel="apple-touch-icon" href="icon-192.png">
+
+    <!-- CSS -->
+    <style>
+        :root {
+            /* Light Theme Palette */
+            --primary: #0D9488;
+            --primary-light: #CCFBF1;
+            --secondary: #334155;
+            --bg: #F8FAFC;
+            --surface: #FFFFFF;
+            --text: #1E293B;
+            --text-muted: #64748B;
+            --danger: #EF4444;
+            --danger-light: #FEE2E2;
+            --success: #10B981;
+            --success-light: #D1FAE5;
+            --warning: #F59E0B; /* Orange for Debt Target */
+            --info: #3B82F6; 
+            
+            --safe-top: env(safe-area-inset-top);
+            --safe-bottom: env(safe-area-inset-bottom);
+        }
+
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            margin: 0; padding: 0;
+            overscroll-behavior-y: none;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        input, select, textarea { font-size: 16px !important; }
+
+        /* --- HEADER --- */
+        header {
+            padding-top: max(15px, var(--safe-top)); 
+            padding-bottom: 15px;
+            padding-left: 20px;
+            padding-right: 20px;
+            background: var(--surface);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #E2E8F0;
+            position: sticky;
+            top: 0;
+            z-index: 50;
+        }
+
+        .brand { display: flex; align-items: center; gap: 10px; }
+        .brand img { width: 28px; height: 28px; }
+        h1 { margin: 0; font-size: 22px; font-weight: 800; letter-spacing: -0.5px; color: var(--primary); }
+        
+        .header-actions { display: flex; align-items: center; gap: 8px; }
+        .icon-btn { 
+            background: none; border: none; padding: 8px; 
+            cursor: pointer; color: var(--text-muted);
+            border-radius: 50%; transition: background 0.2s; display: flex; align-items: center; justify-content: center;
+        }
+        .icon-btn:hover { background: #F1F5F9; color: var(--text); }
+        .room-badge {
+            font-size: 12px; color: var(--primary); font-weight: 600; 
+            background: var(--primary-light); padding: 5px 10px; border-radius: 20px;
+            max-width: 100px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+
+        /* --- MAIN CONTENT --- */
+        main {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            padding-bottom: calc(90px + var(--safe-bottom));
+            overflow-x: hidden;
+        }
+        main::-webkit-scrollbar { display: none; }
+
+        /* Balance Card */
+        .card {
+            background: var(--surface);
+            border-radius: 20px;
+            padding: 25px;
+            margin-bottom: 25px;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05);
+            border: 1px solid #F1F5F9;
+            text-align: center;
+        }
+        .balance-title { color: var(--text-muted); font-size: 13px; text-transform: uppercase; letter-spacing: 1px; font-weight: 600; }
+        .balance-amount { font-size: 42px; font-weight: 800; margin: 10px 0; color: var(--text); letter-spacing: -1px; }
+        .status-badge {
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 6px 12px; border-radius: 12px; font-size: 14px; font-weight: 600;
+        }
+
+        /* List & Swipe Styles */
+        .section-title { font-size: 18px; font-weight: 700; margin-bottom: 15px; display: block; color: var(--secondary); }
+        
+        .swipe-container {
+            position: relative;
+            margin-bottom: 12px;
+            border-radius: 16px;
+            overflow: hidden;
+            background: #E2E8F0;
+        }
+
+        .swipe-bg {
+            position: absolute;
+            top: 0; bottom: 0;
+            width: 50%;
+            display: flex; align-items: center;
+            font-weight: 700; font-size: 14px; color: white;
+            padding: 0 20px;
+        }
+        .swipe-bg.edit { left: 0; background: var(--info); justify-content: flex-start; }
+        .swipe-bg.delete { right: 0; background: var(--danger); justify-content: flex-end; }
+
+        .txn-item {
+            position: relative;
+            background: var(--surface);
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 16px 20px;
+            border: 1px solid #F1F5F9;
+            border-radius: 16px;
+            transition: transform 0.2s ease-out;
+            z-index: 10;
+        }
+        .txn-item.swiping { transition: none; }
+
+        .txn-info h4 { margin: 0; font-size: 16px; font-weight: 600; color: var(--text); }
+        .txn-info p { margin: 4px 0 0; font-size: 13px; color: var(--text-muted); }
+        .txn-amount { font-weight: 700; font-size: 16px; }
+        .txn-amount.fuel { color: var(--success); }
+        .txn-amount.burn { color: var(--text); }
+        .txn-amount.negative { color: var(--danger); } /* Negative contributions are red */
+        
+        /* Empty State */
+        .empty-state { text-align: center; color: var(--text-muted); padding: 40px 20px; font-style: italic; font-size: 14px; }
+        .loading-spinner { text-align: center; padding: 20px; color: var(--primary); font-weight: 600; }
+
+        /* FAB */
+        .fab {
+            position: fixed;
+            bottom: calc(25px + var(--safe-bottom));
+            right: 25px;
+            width: 60px; height: 60px;
+            background: var(--primary);
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            box-shadow: 0 10px 25px -5px rgba(13, 148, 136, 0.4);
+            cursor: pointer; z-index: 100;
+            color: white; transition: transform 0.1s;
+        }
+        .fab:active { transform: scale(0.95); }
+        .fab svg { width: 32px; height: 32px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+        /* --- NOTIFICATIONS (TOAST) --- */
+        #toast-container {
+            position: fixed; top: calc(20px + var(--safe-top)); left: 20px; right: 20px;
+            z-index: 2000; pointer-events: none;
+            display: flex; flex-direction: column; gap: 10px; align-items: center;
+        }
+        .toast {
+            background: #1E293B; color: white;
+            padding: 12px 20px; border-radius: 30px;
+            font-size: 14px; font-weight: 600;
+            box-shadow: 0 10px 20px -5px rgba(0,0,0,0.2);
+            opacity: 0; transform: translateY(-20px);
+            transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+            display: flex; align-items: center; gap: 8px;
+        }
+        .toast.visible { opacity: 1; transform: translateY(0); }
+        .toast.success { background: var(--success); }
+        .toast.error { background: var(--danger); }
+
+        /* --- CONFIRM MODAL --- */
+        .confirm-modal-overlay {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(15, 23, 42, 0.5); z-index: 2100;
+            display: flex; align-items: center; justify-content: center;
+            opacity: 0; pointer-events: none; transition: opacity 0.2s;
+            backdrop-filter: blur(2px);
+        }
+        .confirm-modal-overlay.open { opacity: 1; pointer-events: auto; }
+        .confirm-box {
+            background: white; width: 85%; max-width: 320px;
+            padding: 24px; border-radius: 20px; text-align: center;
+            box-shadow: 0 20px 40px -10px rgba(0,0,0,0.2);
+            transform: scale(0.9); transition: transform 0.2s;
+        }
+        .confirm-modal-overlay.open .confirm-box { transform: scale(1); }
+        .confirm-title { font-size: 18px; font-weight: 700; color: var(--text); margin-bottom: 8px; }
+        .confirm-msg { font-size: 14px; color: var(--text-muted); margin-bottom: 20px; line-height: 1.5; }
+        .confirm-actions { display: flex; gap: 12px; }
+
+        /* --- MODALS --- */
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(15, 23, 42, 0.4);
+            z-index: 200;
+            display: flex; align-items: flex-end;
+            opacity: 0; pointer-events: none;
+            transition: opacity 0.2s;
+            backdrop-filter: blur(2px);
+        }
+        .modal-overlay.open { opacity: 1; pointer-events: auto; }
+
+        .modal-sheet {
+            background: var(--surface);
+            width: 100%;
+            border-top-left-radius: 24px; border-top-right-radius: 24px;
+            padding: 25px;
+            padding-bottom: calc(25px + var(--safe-bottom));
+            transform: translateY(100%); transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+            max-height: 90vh; overflow-y: auto;
+        }
+        .modal-overlay.open .modal-sheet { transform: translateY(0); }
+        .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        .modal-title { font-size: 20px; font-weight: 800; color: var(--secondary); }
+
+        /* Toggle Switch */
+        .toggle-container {
+            display: flex; background: #F1F5F9; border-radius: 12px;
+            padding: 4px; margin-bottom: 25px;
+        }
+        .toggle-btn {
+            flex: 1; text-align: center; padding: 12px;
+            font-weight: 600; font-size: 14px; border-radius: 10px;
+            color: var(--text-muted); cursor: pointer; transition: all 0.2s;
+        }
+        .toggle-btn.active { background: white; shadow: 0 2px 4px rgba(0,0,0,0.05); color: var(--text); }
+        .toggle-btn.active.burn { color: var(--danger); }
+        .toggle-btn.active.fuel { color: var(--success); }
+        
+        /* Locked Toggle State (During Edit) */
+        .toggle-container.locked { opacity: 0.6; pointer-events: none; }
+
+        /* Form Inputs */
+        .input-group { margin-bottom: 20px; display: block; }
+        .hidden { display: none !important; }
+        
+        .input-label { display: block; font-size: 13px; color: var(--text-muted); margin-bottom: 8px; font-weight: 500; }
+        .input-field {
+            width: 100%; padding: 16px;
+            background: #F8FAFC; border: 2px solid #F1F5F9;
+            border-radius: 16px; font-size: 18px; font-weight: 600; color: var(--text);
+            outline: none; transition: border-color 0.2s;
+        }
+        .input-field:focus { border-color: var(--primary); background: #fff; }
+        .input-amount { font-size: 32px; text-align: center; letter-spacing: -1px; }
+
+        /* Action Buttons */
+        .modal-actions { display: flex; gap: 15px; margin-top: 10px; }
+        .btn {
+            flex: 1; padding: 16px; border-radius: 16px; border: none;
+            font-size: 16px; font-weight: 600; cursor: pointer;
+        }
+        .btn-cancel { background: #F1F5F9; color: var(--text); }
+        .btn-save { background: var(--primary); color: white; }
+        .btn-save.burn { background: var(--danger); }
+        .btn-save.fuel { background: var(--success); }
+        
+        .btn-disabled { opacity: 0.5; pointer-events: none; }
+
+        /* --- SETTINGS & DASHBOARD STYLES --- */
+        .chip-list { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+        .chip { 
+            background: #F1F5F9; padding: 12px 16px; border-radius: 16px; 
+            font-size: 14px; color: var(--text); display: flex; justify-content: space-between; align-items: center; font-weight: 500;
+            cursor: pointer; transition: background 0.2s;
+        }
+        .chip:active { background: #E2E8F0; }
+        .chip .del { color: var(--danger); cursor: pointer; font-weight: bold; font-size: 20px; line-height: 1; padding: 0 5px; }
+        .add-row { display: flex; gap: 10px; }
+        .btn-small { padding: 0 15px; border-radius: 12px; border: none; background: var(--secondary); color: white; font-weight: 600; cursor: pointer; }
+
+        /* Dashboard specific */
+        .stat-row { display: flex; gap: 10px; margin-bottom: 20px; }
+        .stat-card { flex: 1; background: #F8FAFC; padding: 15px; border-radius: 16px; text-align: center; }
+        .stat-label { font-size: 12px; color: var(--text-muted); margin-bottom: 5px; text-transform: uppercase; }
+        .stat-value { font-size: 18px; font-weight: 800; color: var(--text); }
+        .stat-value.fuel { color: var(--success); }
+        .stat-value.burn { color: var(--danger); }
+        
+        .dash-section { margin-top: 25px; }
+        .dash-section h4 { font-size: 16px; font-weight: 700; margin-bottom: 10px; border-bottom: 2px solid #F1F5F9; padding-bottom: 5px; }
+        
+        /* Dashboard Period Controls */
+        .filter-controls { display: flex; justify-content: center; align-items: center; gap: 15px; margin: 15px 0; }
+        .period-display { font-size: 16px; font-weight: 700; color: var(--primary); min-width: 120px; text-align: center; }
+        .nav-btn {
+            width: 44px; height: 44px; border-radius: 12px; border: none;
+            background: #F1F5F9; color: var(--secondary);
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer; transition: background 0.2s;
+        }
+        .nav-btn:active { background: #E2E8F0; transform: scale(0.95); }
+
+        /* Dash Table */
+        .dash-table { width: 100%; border-collapse: separate; border-spacing: 0 4px; font-size: 14px; }
+        .dash-table th { text-align: left; padding: 8px; color: var(--text-muted); font-size: 12px; font-weight: 600; border-bottom: 1px solid #E2E8F0; }
+        .dash-table td { padding: 10px 8px; vertical-align: middle; }
+        .dash-table td:first-child { border-top-left-radius: 8px; border-bottom-left-radius: 8px; padding-left: 12px; }
+        .dash-table td:last-child { border-top-right-radius: 8px; border-bottom-right-radius: 8px; padding-right: 12px; }
+        
+        /* Removed font-family: monospace to make numbers uniform with letters */
+        .dash-table .money { font-weight: 600; letter-spacing: -0.5px; }
+        .dash-table .pos { color: var(--success); }
+        .dash-table .neg { color: var(--danger); }
+        .dash-table .warn { color: var(--warning); }
+
+        /* --- LOGIN SCREEN --- */
+        #login-screen {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: var(--bg); z-index: 1000;
+            display: flex; flex-direction: column; 
+            align-items: center; justify-content: center;
+            padding: 40px;
+            transition: opacity 0.3s;
+        }
+        #login-screen.hidden { opacity: 0; pointer-events: none; }
+
+        .login-logo { width: 80px; height: 80px; margin-bottom: 20px; }
+        .login-title { font-size: 24px; font-weight: 800; color: var(--primary); margin-bottom: 10px; }
+        .login-subtitle { font-size: 14px; color: var(--text-muted); margin-bottom: 40px; text-align: center; }
+        
+        .login-input {
+            width: 100%; max-width: 300px;
+            padding: 16px; font-size: 20px; text-align: center; letter-spacing: 2px;
+            border: 2px solid #E2E8F0; border-radius: 16px; outline: none;
+            margin-bottom: 20px; font-weight: 700; background: white;
+        }
+        .login-input:focus { border-color: var(--primary); }
+        
+        .login-btn {
+            width: 100%; max-width: 300px;
+            padding: 16px; background: var(--primary); color: white;
+            font-weight: 700; border-radius: 16px; border: none;
+            font-size: 16px; cursor: pointer;
+        }
+
+    </style>
+</head>
+<body>
+
+    <!-- TOAST & MODALS -->
+    <div id="toast-container"></div>
+    <div id="confirm-modal-overlay" class="confirm-modal-overlay">
+        <div class="confirm-box">
+            <div class="confirm-title" id="confirm-title">Confirm</div>
+            <div class="confirm-msg" id="confirm-msg">Are you sure?</div>
+            <div class="confirm-actions">
+                <button class="btn btn-cancel" onclick="closeConfirm(false)">Cancel</button>
+                <button class="btn btn-save" id="confirm-yes-btn" onclick="closeConfirm(true)">Yes</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- LOGIN -->
+    <div id="login-screen">
+        <img src="icon-512.png" class="login-logo" alt="Logo">
+        <div class="login-title">SplitSync</div>
+        <div class="login-subtitle">Enter the code to access<br>your shared finances.</div>
+        <input type="password" id="login-code" class="login-input" placeholder="CODE" maxlength="10" />
+        <button class="login-btn" onclick="attemptLogin()">Enter</button>
+    </div>
+
+    <!-- HEADER -->
+    <header>
+        <div class="brand">
+            <img src="favicon.png" alt="Logo">
+            <h1>SplitSync</h1>
+        </div>
+        <div class="header-actions">
+            <div class="room-badge" id="room-display">...</div>
+            <button class="icon-btn" onclick="openStats()" title="Dashboard">
+                 <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>
+            </button>
+            <button class="icon-btn" onclick="openSettings()" title="Settings">
+                <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.1a2 2 0 0 1-1-1.74v-.47a2 2 0 0 1 1-1.74l.15-.1a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+            </button>
+            <button class="icon-btn" onclick="logout()" title="Exit">
+                <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+            </button>
+        </div>
+    </header>
+
+    <!-- MAIN -->
+    <main>
+        <div class="card">
+            <div class="balance-title">Pool Balance (Carryover)</div>
+            <div class="balance-amount" id="pool-balance">...</div>
+            <div id="status-display"><span style="color: var(--text-muted); font-size: 14px;">Syncing...</span></div>
+        </div>
+
+        <span class="section-title">Latest Activity</span>
+        <div id="transaction-list">
+            <div class="loading-spinner">Connecting to SplitSync Cloud...</div>
+        </div>
+    </main>
+
+    <div class="fab" onclick="openAddModal()">
+        <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"></path></svg>
+    </div>
+
+    <!-- MODAL: ADD/EDIT -->
+    <div id="add-modal-overlay" class="modal-overlay" onclick="closeModal('add')">
+        <div class="modal-sheet" id="add-sheet-content" onclick="event.stopPropagation()">
+            
+            <div class="toggle-container" id="mode-toggle">
+                <div id="tab-burn" class="toggle-btn active burn" onclick="setMode('burn')">Expense</div>
+                <div id="tab-fuel" class="toggle-btn" onclick="setMode('fuel')">Contribution</div>
+            </div>
+
+            <!-- Date Field (Shared) -->
+            <div class="input-group" id="grp-date">
+                <label class="input-label">Date</label>
+                <input type="date" id="inp-date" class="input-field">
+            </div>
+
+            <!-- Amount -->
+            <div class="input-group">
+                <label class="input-label">Amount</label>
+                <input type="number" id="inp-amount" class="input-field input-amount" placeholder="0" inputmode="decimal">
+            </div>
+
+            <!-- Who & Category (Flex Layout) -->
+            <div class="input-group" style="display:flex; gap: 15px;">
+                <div style="flex:1" id="grp-user">
+                    <label class="input-label" id="lbl-user">Who Paid?</label>
+                    <select id="inp-user" class="input-field"></select>
+                </div>
+                <div style="flex:1" id="grp-cat">
+                    <label class="input-label">Category</label>
+                    <select id="inp-cat" class="input-field"></select>
+                </div>
+            </div>
+
+            <!-- Description -->
+            <div class="input-group">
+                <label class="input-label">Description (Optional)</label>
+                <input type="text" id="inp-desc" class="input-field" placeholder="e.g. Groceries">
+            </div>
+            
+            <input type="hidden" id="edit-id" value="">
+
+            <div class="modal-actions">
+                <button class="btn btn-cancel" onclick="closeModal('add')">Cancel</button>
+                <button id="btn-save" class="btn btn-save burn" onclick="saveTransaction()">Burn</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: DASHBOARD -->
+    <div id="stats-modal-overlay" class="modal-overlay" onclick="closeModal('stats')">
+        <div class="modal-sheet" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <span class="modal-title">Dashboard</span>
+                <button class="icon-btn" onclick="closeModal('stats')">Close</button>
+            </div>
+
+            <div class="toggle-container">
+                <div id="tab-month" class="toggle-btn active" onclick="setStatsView('month')">Monthly</div>
+                <div id="tab-year" class="toggle-btn" onclick="setStatsView('year')">Yearly</div>
+            </div>
+            
+            <div class="filter-controls">
+                <button class="nav-btn" onclick="changeStatsPeriod(-1)">
+                    <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+                </button>
+                <span id="period-display" class="period-display">...</span>
+                <button class="nav-btn" onclick="changeStatsPeriod(1)">
+                    <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+                </button>
+            </div>
+
+            <div id="dash-content"></div>
+        </div>
+    </div>
+
+    <!-- MODAL: SETTINGS -->
+    <div id="settings-modal-overlay" class="modal-overlay" onclick="closeModal('settings')">
+        <div class="modal-sheet" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <span class="modal-title">Group Settings</span>
+                <button class="icon-btn" onclick="closeModal('settings')">Done</button>
+            </div>
+
+            <div class="input-group">
+                <label class="input-label">Total Monthly Target</label>
+                <input id="inp-budget-display" type="text" class="input-field" disabled style="background:#F1F5F9; color:var(--text-muted)">
+            </div>
+
+            <!-- Setup Categories -->
+            <div class="input-group">
+                <label class="input-label">Category Budgets (Click to Edit)</label>
+                <div class="add-row">
+                    <input id="new-cat-name" class="input-field" style="padding: 10px; font-size: 16px; flex:2" placeholder="Item (e.g. Rent)">
+                    <input id="new-cat-amount" type="number" class="input-field" style="padding: 10px; font-size: 16px; flex:1" placeholder="Amount">
+                    <button class="btn-small" id="btn-add-cat" onclick="addItem('categories')">Add</button>
+                </div>
+                <div id="categories-list" class="chip-list"></div>
+            </div>
+            
+            <div class="input-group">
+                <label class="input-label">Team Members</label>
+                <div class="add-row">
+                    <input id="new-member" class="input-field" style="padding: 10px; font-size: 16px;" placeholder="Name (e.g. Alice)">
+                    <button class="btn-small" onclick="addItem('members')">Add</button>
+                </div>
+                <div id="members-list" class="chip-list" style="flex-direction:row; flex-wrap:wrap"></div>
+            </div>
+
+            <p style="color:var(--text-muted); font-size:12px; margin-top:20px; text-align:center;">
+                Changes save to room <span id="settings-room-id"></span>
+            </p>
+        </div>
+    </div>
+
+    <!-- LOGIC -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getFirestore, collection, addDoc, onSnapshot, query, orderBy, serverTimestamp, doc, setDoc, getDoc, updateDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+        // CONFIG
+        const firebaseConfig = {
+            apiKey: "AIzaSyCoi-ZuQQvQjhjOmMhxXarB0C4gA0tn68Q",
+            authDomain: "splitsync-9a3d7.firebaseapp.com",
+            projectId: "splitsync-9a3d7",
+            storageBucket: "splitsync-9a3d7.firebasestorage.app",
+            messagingSenderId: "676236175990",
+            appId: "1:676236175990:web:af9848bbe4733c794dcd57"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        // STATE
+        let currentRoom = localStorage.getItem('splitsync_room_id');
+        let currentMode = 'burn'; 
+        let unsubscribe = null;
+        let allTransactions = [];
+        let configData = {
+            members: ['Me'],
+            categories: [
+                {name: 'Food', amount: 0},
+                {name: 'Transport', amount: 0}, 
+                {name: 'Home', amount: 0}
+            ],
+            budget: 0
+        };
+        let confirmCallback = null;
+        let statsView = 'month';
+        let viewDate = new Date(); 
+        let editingCategoryName = null;
+
+        // EXPORTS
+        window.openAddModal = openAddModal;
+        window.openSettings = openSettings;
+        window.openStats = openStats;
+        window.closeModal = closeModal;
+        window.setMode = setMode;
+        window.saveTransaction = saveTransaction;
+        window.attemptLogin = attemptLogin;
+        window.logout = logout;
+        window.addItem = addItem;
+        window.removeItem = removeItem;
+        window.closeConfirm = closeConfirm;
+        window.setStatsView = setStatsView;
+        window.changeStatsPeriod = changeStatsPeriod;
+        window.deleteTxn = deleteTxn;
+        window.editTxn = editTxn;
+        window.saveConfig = saveConfig;
+        window.editCategory = editCategory;
+
+        // INIT
+        checkAuth();
+        
+        document.getElementById('login-code').addEventListener("keypress", (e) => {
+            if (e.key === "Enter") { e.preventDefault(); attemptLogin(); }
+        });
+        
+        document.getElementById('add-sheet-content').addEventListener("keypress", (e) => {
+            if (e.key === "Enter" && e.target.tagName !== 'TEXTAREA') {
+                e.preventDefault(); 
+                saveTransaction();
+            }
+        });
+
+        document.getElementById('new-cat-amount').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') addItem('categories');
+        });
+        document.getElementById('new-cat-name').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') document.getElementById('new-cat-amount').focus();
+        });
+
+        // --- UI UTILS ---
+        function showToast(msg, type = 'success') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.textContent = msg;
+            container.appendChild(toast);
+            requestAnimationFrame(() => toast.classList.add('visible'));
+            setTimeout(() => {
+                toast.classList.remove('visible');
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+
+        function showConfirm(title, msg, onYes) {
+            document.getElementById('confirm-title').textContent = title;
+            document.getElementById('confirm-msg').textContent = msg;
+            document.getElementById('confirm-modal-overlay').classList.add('open');
+            confirmCallback = onYes;
+        }
+
+        function closeConfirm(isYes) {
+            document.getElementById('confirm-modal-overlay').classList.remove('open');
+            if (isYes && confirmCallback) confirmCallback();
+            confirmCallback = null;
+        }
+
+        // --- AUTH ---
+        function checkAuth() {
+            if (currentRoom) {
+                document.getElementById('login-screen').classList.add('hidden');
+                document.getElementById('room-display').textContent = currentRoom;
+                document.getElementById('settings-room-id').textContent = currentRoom;
+                loadConfig(); 
+                subscribeToData();
+            } else {
+                document.getElementById('login-screen').classList.remove('hidden');
+                document.getElementById('login-code').focus();
+            }
+        }
+
+        function attemptLogin() {
+            const code = document.getElementById('login-code').value.trim();
+            if (code.length > 0) {
+                currentRoom = code;
+                localStorage.setItem('splitsync_room_id', currentRoom);
+                checkAuth();
+                showToast(`Welcome to Room ${code}`);
+            } else {
+                showToast("Please enter a code", "error");
+            }
+        }
+
+        function logout() {
+            showConfirm("Exit Group", "You will need the code to enter again.", () => {
+                localStorage.removeItem('splitsync_room_id');
+                currentRoom = null;
+                if (unsubscribe) unsubscribe();
+                document.getElementById('login-code').value = "";
+                checkAuth();
+            });
+        }
+
+        // --- CONFIG & SETTINGS ---
+        async function loadConfig() {
+            const docRef = doc(db, "rooms", currentRoom, "config", "main");
+            try {
+                const docSnap = await getDoc(docRef);
+                if (docSnap.exists()) {
+                    let data = docSnap.data();
+                    if (data.categories && data.categories.length > 0 && typeof data.categories[0] === 'string') {
+                        data.categories = data.categories.map(c => ({ name: c, amount: 0 }));
+                        await updateDoc(docRef, { categories: data.categories });
+                    }
+                    configData = data;
+                } else {
+                    await setDoc(docRef, configData);
+                }
+                calculateTotalBudget();
+            } catch (e) { console.log("Config load error:", e); }
+        }
+
+        function calculateTotalBudget() {
+            let total = 0;
+            configData.categories.forEach(c => total += (c.amount || 0));
+            configData.budget = total;
+            document.getElementById('inp-budget-display').value = `₱${total.toLocaleString()}`;
+        }
+
+        async function saveConfig() {
+            calculateTotalBudget();
+            const docRef = doc(db, "rooms", currentRoom, "config", "main");
+            try {
+                await setDoc(docRef, configData);
+                renderSettingsLists();
+                showToast("Settings saved");
+            } catch (e) { showToast("Error saving", "error"); }
+        }
+
+        function openSettings() {
+            editingCategoryName = null;
+            document.getElementById('btn-add-cat').textContent = "Add";
+            renderSettingsLists();
+            calculateTotalBudget();
+            document.getElementById('settings-modal-overlay').classList.add('open');
+        }
+
+        function renderSettingsLists() {
+            const mList = document.getElementById('members-list');
+            mList.innerHTML = configData.members.map(m => 
+                `<div class="chip">${m} <span class="del" onclick="removeItem('members', '${m}')">&times;</span></div>`
+            ).join('');
+
+            const cList = document.getElementById('categories-list');
+            cList.innerHTML = configData.categories.map(c => 
+                `<div class="chip" onclick="editCategory('${c.name}')">
+                    <span>${c.name} <span style="color:var(--text-muted); font-weight:400">(₱${c.amount.toLocaleString()})</span></span> 
+                    <span class="del" onclick="event.stopPropagation(); removeItem('categories', '${c.name}')">&times;</span>
+                </div>`
+            ).join('');
+        }
+
+        function editCategory(name) {
+            const cat = configData.categories.find(c => c.name === name);
+            if (cat) {
+                document.getElementById('new-cat-name').value = cat.name;
+                document.getElementById('new-cat-amount').value = cat.amount;
+                editingCategoryName = name;
+                document.getElementById('btn-add-cat').textContent = "Update";
+                document.getElementById('new-cat-name').focus();
+            }
+        }
+
+        function addItem(type) {
+            if (type === 'members') {
+                const input = document.getElementById('new-member');
+                const val = input.value.trim();
+                if (val && !configData.members.includes(val)) {
+                    configData.members.push(val);
+                    saveConfig();
+                    input.value = '';
+                }
+            } else {
+                const nameInput = document.getElementById('new-cat-name');
+                const amtInput = document.getElementById('new-cat-amount');
+                const name = nameInput.value.trim();
+                const amt = parseFloat(amtInput.value) || 0;
+                
+                if (name) {
+                    if (editingCategoryName) {
+                        const idx = configData.categories.findIndex(c => c.name === editingCategoryName);
+                        if (idx !== -1) {
+                            configData.categories[idx] = { name: name, amount: amt };
+                            saveConfig();
+                        }
+                        editingCategoryName = null;
+                        document.getElementById('btn-add-cat').textContent = "Add";
+                    } else {
+                        if (!configData.categories.find(c => c.name === name)) {
+                            configData.categories.push({ name: name, amount: amt });
+                            saveConfig();
+                        } else {
+                            showToast("Category exists", "error");
+                        }
+                    }
+                    nameInput.value = '';
+                    amtInput.value = '';
+                    nameInput.focus();
+                }
+            }
+        }
+
+        function removeItem(type, val) {
+            showConfirm("Remove Item", `Delete "${val}"?`, () => {
+                if (type === 'members') {
+                    configData[type] = configData[type].filter(item => item !== val);
+                } else {
+                    configData[type] = configData[type].filter(item => item.name !== val);
+                }
+                saveConfig();
+            });
+        }
+
+        // --- TRANSACTIONS ---
+        function subscribeToData() {
+            if (unsubscribe) unsubscribe();
+            document.getElementById('transaction-list').innerHTML = '<div class="loading-spinner">Syncing...</div>';
+
+            const q = query(collection(db, "rooms", currentRoom, "transactions"), orderBy("timestamp", "desc"));
+            unsubscribe = onSnapshot(q, (snapshot) => {
+                allTransactions = [];
+                snapshot.forEach((doc) => allTransactions.push({ id: doc.id, ...doc.data() }));
+                renderList(allTransactions);
+            }, (error) => {
+                document.getElementById('transaction-list').innerHTML = '<div class="empty-state" style="color:var(--danger)">Connection Error.</div>';
+            });
+        }
+
+        async function saveTransaction() {
+            const amountVal = parseFloat(document.getElementById('inp-amount').value);
+            
+            if (isNaN(amountVal)) { showToast("Invalid Amount", "error"); return; }
+            if (currentMode === 'burn' && amountVal <= 0) { showToast("Expense must be > 0", "error"); return; }
+            if (currentMode === 'fuel' && amountVal === 0) { showToast("Amount cannot be 0", "error"); return; }
+
+            const btnSave = document.getElementById('btn-save');
+            const editId = document.getElementById('edit-id').value;
+            btnSave.classList.add('btn-disabled');
+            btnSave.textContent = "Saving...";
+
+            try {
+                const descVal = document.getElementById('inp-desc').value.trim();
+                const userVal = document.getElementById('inp-user').value;
+                const collectionRef = collection(db, "rooms", currentRoom, "transactions");
+                const serverTime = serverTimestamp();
+                
+                const rawDate = document.getElementById('inp-date').value; 
+                const dateObj = new Date(rawDate);
+                const userTimezoneOffset = dateObj.getTimezoneOffset() * 60000;
+                const adjustedDate = new Date(dateObj.getTime() + userTimezoneOffset);
+                const dateStr = adjustedDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
+                let txnData = {};
+
+                if (currentMode === 'fuel') {
+                    txnData = {
+                        type: 'fuel',
+                        amount: amountVal,
+                        desc: descVal || 'Contribution',
+                        category: 'Contribution', 
+                        user: userVal,
+                        timestamp: serverTime, 
+                        dateString: dateStr,
+                        txnDate: rawDate 
+                    };
+                } else {
+                    const catVal = document.getElementById('inp-cat').value;
+                    txnData = {
+                        type: 'burn',
+                        amount: amountVal,
+                        desc: descVal || 'Expense',
+                        category: catVal,
+                        user: userVal,
+                        timestamp: serverTime,
+                        dateString: dateStr,
+                        txnDate: rawDate 
+                    };
+                }
+
+                if (editId) {
+                    delete txnData.timestamp; 
+                    await updateDoc(doc(db, "rooms", currentRoom, "transactions", editId), txnData);
+                    showToast("Updated");
+                } else {
+                    await addDoc(collectionRef, txnData);
+                    if (currentMode === 'burn' && userVal !== 'Pool') {
+                         await addDoc(collectionRef, {
+                            type: 'fuel',
+                            amount: amountVal,
+                            desc: `Covered: ${descVal || 'Expense'}`,
+                            category: 'Contribution',
+                            user: userVal,
+                            timestamp: serverTime,
+                            dateString: dateStr,
+                            txnDate: rawDate
+                        });
+                        showToast("Saved + Credit Added");
+                    } else {
+                        showToast("Saved");
+                    }
+                }
+                closeModal('add');
+            } catch (e) {
+                console.error(e);
+                showToast("Error saving", "error");
+            } finally {
+                btnSave.classList.remove('btn-disabled');
+                document.getElementById('edit-id').value = "";
+                setMode(currentMode, false);
+            }
+        }
+
+        // --- DASHBOARD ---
+        function openStats() {
+            viewDate = new Date(); // Reset to Now
+            setStatsView('month');
+            document.getElementById('stats-modal-overlay').classList.add('open');
+        }
+
+        function setStatsView(view) {
+            statsView = view;
+            document.getElementById('tab-month').className = `toggle-btn ${view==='month' ? 'active' : ''}`;
+            document.getElementById('tab-year').className = `toggle-btn ${view==='year' ? 'active' : ''}`;
+            renderDashboard();
+        }
+
+        function changeStatsPeriod(offset) {
+            if (statsView === 'month') {
+                viewDate.setMonth(viewDate.getMonth() + offset);
+            } else {
+                viewDate.setFullYear(viewDate.getFullYear() + offset);
+            }
+            renderDashboard();
+        }
+
+        function renderDashboard() {
+            const container = document.getElementById('dash-content');
+            const targetMonth = viewDate.getMonth();
+            const targetYear = viewDate.getFullYear();
+
+            // Display
+            const displayEl = document.getElementById('period-display');
+            if (statsView === 'month') {
+                displayEl.textContent = viewDate.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+            } else {
+                displayEl.textContent = targetYear;
+            }
+
+            // 1. Calculate Carryover (Cumulative History)
+            const memberCount = configData.members.length || 1;
+            const monthlyBudget = configData.budget || 0;
+            const memberCarryover = {}; 
+            configData.members.forEach(m => memberCarryover[m] = 0);
+
+            // Find Start of History
+            let earliestDate = new Date();
+            let hasHistory = false;
+            
+            allTransactions.forEach(t => {
+                let d = t.txnDate ? new Date(t.txnDate) : (t.timestamp ? t.timestamp.toDate() : new Date());
+                // Fix TZ
+                if(t.txnDate) {
+                     const off = d.getTimezoneOffset() * 60000;
+                     d = new Date(d.getTime() + off);
+                }
+                if (d < earliestDate) earliestDate = d;
+                hasHistory = true;
+            });
+
+            // If we have history, calc carryover up to START of view period
+            if (hasHistory) {
+                // Determine start of View Period
+                const viewStart = new Date(targetYear, statsView === 'month' ? targetMonth : 0, 1);
+                
+                // Count months from earliest to viewStart
+                let monthsPassed = 0;
+                let iterDate = new Date(earliestDate.getFullYear(), earliestDate.getMonth(), 1);
+                
+                while (iterDate < viewStart) {
+                    monthsPassed++;
+                    iterDate.setMonth(iterDate.getMonth() + 1);
+                }
+
+                // Calc Past Due (Budget * Months)
+                const pastTargetTotal = monthsPassed * (monthlyBudget / memberCount);
+
+                // Calc Past Paid
+                allTransactions.forEach(t => {
+                    let d = t.txnDate ? new Date(t.txnDate) : (t.timestamp ? t.timestamp.toDate() : new Date());
+                    if(t.txnDate) { const off = d.getTimezoneOffset()*60000; d = new Date(d.getTime()+off); }
+                    
+                    if (d < viewStart && t.type === 'fuel' && memberCarryover[t.user] !== undefined) {
+                        memberCarryover[t.user] += t.amount;
+                    }
+                });
+
+                // Net Carryover = PastPaid - PastTarget
+                // Positive = Overpaid in past (Credit)
+                // Negative = Underpaid in past (Debt)
+                Object.keys(memberCarryover).forEach(m => {
+                    memberCarryover[m] = memberCarryover[m] - pastTargetTotal;
+                });
+            }
+
+            // 2. Filter Current View Transactions
+            const filtered = allTransactions.filter(t => {
+                let tDate = new Date();
+                if (t.txnDate) {
+                    tDate = new Date(t.txnDate);
+                    const offset = tDate.getTimezoneOffset() * 60000;
+                    tDate = new Date(tDate.getTime() + offset);
+                } else if (t.timestamp) {
+                    tDate = t.timestamp.toDate(); 
+                }
+
+                if (statsView === 'month') {
+                    return tDate.getMonth() === targetMonth && tDate.getFullYear() === targetYear;
+                } else {
+                    return tDate.getFullYear() === targetYear;
+                }
+            });
+
+            // 3. Aggregate Current Data
+            let totalBurn = 0;
+            let totalFuel = 0;
+            const memberStats = {}; 
+            const categoryStats = {};
+
+            configData.members.forEach(m => memberStats[m] = {fuel: 0});
+            configData.categories.forEach(c => categoryStats[c.name] = {spent: 0, budget: c.amount || 0});
+
+            filtered.forEach(t => {
+                if (t.type === 'fuel') {
+                    totalFuel += t.amount;
+                    if (!memberStats[t.user]) memberStats[t.user] = {fuel: 0};
+                    memberStats[t.user].fuel += t.amount;
+                } else {
+                    totalBurn += t.amount;
+                    if (!categoryStats[t.category]) categoryStats[t.category] = {spent: 0, budget: 0}; 
+                    categoryStats[t.category].spent += t.amount;
+                }
+            });
+
+            const baseTarget = monthlyBudget / memberCount;
+
+            // Generate HTML
+            let html = `
+                <div class="dash-section" style="margin-top:0">
+                    <h4>Overview</h4>
+                    <div class="stat-row">
+                        <div class="stat-card">
+                            <div class="stat-label">Total Target</div>
+                            <div class="stat-value" style="color:var(--text)">₱${monthlyBudget.toLocaleString()}</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">Actual Spent</div>
+                            <div class="stat-value burn">₱${totalBurn.toLocaleString()}</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="dash-section">
+                    <h4>Member Breakdown</h4>
+                    <table class="dash-table">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Target</th>
+                                <th>Paid</th>
+                                <th>To Give</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${Object.entries(memberStats).map(([name, stats]) => {
+                                const carry = memberCarryover[name] || 0;
+                                // Adjusted Target: Base - Carryover
+                                // If I overpaid 200 (carry=200), Target = 1000 - 200 = 800.
+                                // If I owe 200 (carry=-200), Target = 1000 - (-200) = 1200.
+                                const adjustedTarget = baseTarget - carry;
+                                
+                                const paid = stats.fuel;
+                                const toGive = adjustedTarget - paid;
+                                
+                                // Logic for Colors
+                                // Target Color: Green if carry > 0 (relief), Orange if carry < 0 (burden)
+                                const targetClass = carry > 0 ? 'pos' : (carry < 0 ? 'warn' : '');
+                                
+                                // To Give Color:
+                                // > 0: Debt (Red, Negative sign) e.g. 500 -> -500
+                                // <= 0: Credit (Green, No sign) e.g. -200 -> 200
+                                
+                                let toGiveHtml = '';
+                                if (toGive > 0) {
+                                    toGiveHtml = `<span class="neg">-₱${toGive.toLocaleString()}</span>`;
+                                } else {
+                                    toGiveHtml = `<span class="pos">₱${Math.abs(toGive).toLocaleString()}</span>`;
+                                }
+
+                                return `
+                                    <tr>
+                                        <td>${name}</td>
+                                        <td class="money ${targetClass}">₱${adjustedTarget.toLocaleString(undefined, {maximumFractionDigits:0})}</td>
+                                        <td class="money">₱${paid.toLocaleString(undefined, {maximumFractionDigits:0})}</td>
+                                        <td class="money">${toGiveHtml}</td>
+                                    </tr>
+                                `;
+                            }).join('')}
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="dash-section">
+                    <h4>Category Performance</h4>
+                     <table class="dash-table">
+                        <thead>
+                            <tr>
+                                <th>Category</th>
+                                <th>Budget</th>
+                                <th>Spent</th>
+                                <th>Diff</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${configData.categories.map(c => {
+                                const stats = categoryStats[c.name] || {spent:0};
+                                const diff = (c.amount || 0) - stats.spent;
+                                const diffClass = diff >= 0 ? 'pos' : 'neg';
+                                
+                                let rowStyle = '';
+                                if (stats.spent > (c.amount || 0)) {
+                                    rowStyle = 'background-color: var(--danger-light)'; 
+                                } else if (stats.spent > 0 && stats.spent < (c.amount || 0)) {
+                                    rowStyle = 'background-color: var(--success-light)';
+                                }
+
+                                return `
+                                    <tr style="${rowStyle}">
+                                        <td>${c.name}</td>
+                                        <td class="money">₱${(c.amount||0).toLocaleString()}</td>
+                                        <td class="money">₱${stats.spent.toLocaleString()}</td>
+                                        <td class="money ${diffClass}">₱${diff.toLocaleString()}</td>
+                                    </tr>
+                                `;
+                            }).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+            container.innerHTML = html;
+        }
+
+        // --- UI & SWIPE ---
+        function setMode(mode, locked = false) {
+            currentMode = mode;
+            const container = document.getElementById('mode-toggle');
+            if (locked) container.classList.add('locked');
+            else container.classList.remove('locked');
+
+            document.getElementById('tab-burn').className = `toggle-btn ${mode === 'burn' ? 'active burn' : ''}`;
+            document.getElementById('tab-fuel').className = `toggle-btn ${mode === 'fuel' ? 'active fuel' : ''}`;
+            
+            const userSel = document.getElementById('inp-user');
+            const catSel = document.getElementById('inp-cat');
+            const grpCat = document.getElementById('grp-cat');
+            const grpDate = document.getElementById('grp-date');
+            const lblUser = document.getElementById('lbl-user');
+
+            grpDate.classList.remove('hidden');
+
+            if (mode === 'burn') {
+                lblUser.textContent = "Who Paid?";
+                grpCat.classList.remove('hidden');
+                
+                let userOpts = `<option value="Pool">Pool</option>`;
+                userOpts += configData.members.map(m => `<option value="${m}">${m}</option>`).join('');
+                userSel.innerHTML = userOpts;
+                catSel.innerHTML = configData.categories.map(c => `<option value="${c.name}">${c.name}</option>`).join('');
+
+                const btn = document.getElementById('btn-save');
+                btn.className = `btn btn-save burn`;
+                btn.textContent = document.getElementById('edit-id').value ? 'Update Burn' : 'Burn';
+            } else {
+                lblUser.textContent = "Who Gave?";
+                grpCat.classList.add('hidden'); 
+                
+                userSel.innerHTML = configData.members.map(m => `<option value="${m}">${m}</option>`).join('');
+
+                const btn = document.getElementById('btn-save');
+                btn.className = `btn btn-save fuel`;
+                btn.textContent = document.getElementById('edit-id').value ? 'Update Fuel' : 'Fuel';
+            }
+        }
+
+        function openAddModal() {
+            document.getElementById('edit-id').value = "";
+            document.getElementById('inp-date').valueAsDate = new Date();
+            document.getElementById('inp-amount').value = '';
+            document.getElementById('inp-desc').value = '';
+            setMode(currentMode, false); 
+            document.getElementById('add-modal-overlay').classList.add('open');
+            document.getElementById('inp-amount').focus();
+        }
+        
+        function closeModal(type) {
+            const id = type === 'settings' ? 'settings-modal-overlay' : 
+                       type === 'stats' ? 'stats-modal-overlay' : 'add-modal-overlay';
+            const overlay = document.getElementById(id);
+            if (!overlay) return;
+            overlay.classList.remove('open');
+        }
+
+        function renderList(transactions) {
+            let totalFuel = 0, totalBurn = 0;
+            const endOfToday = new Date();
+            endOfToday.setHours(23,59,59,999);
+            
+            transactions.forEach(t => {
+                let tDate = new Date();
+                if (t.txnDate) {
+                    const parts = t.txnDate.split('-');
+                    tDate = new Date(parts[0], parts[1]-1, parts[2]); 
+                } else if (t.timestamp) {
+                    tDate = t.timestamp.toDate(); 
+                }
+                
+                if (tDate <= endOfToday) {
+                    if (t.type === 'fuel') totalFuel += t.amount;
+                    else totalBurn += t.amount;
+                }
+            });
+            
+            const bal = totalFuel - totalBurn;
+            document.getElementById('pool-balance').textContent = `₱${bal.toLocaleString(undefined, {minimumFractionDigits: 2})}`;
+            
+            const statusDiv = document.getElementById('status-display');
+            if (bal >= 0) statusDiv.innerHTML = `<span class="status-badge" style="background: var(--success-light); color: var(--success);">Pool is Safe</span>`;
+            else statusDiv.innerHTML = `<span class="status-badge" style="background: var(--danger-light); color: var(--danger);">Pool Deficit</span>`;
+
+            const list = document.getElementById('transaction-list');
+            if (transactions.length === 0) { list.innerHTML = '<div class="empty-state">No transactions yet.<br>Tap + to start.</div>'; return; }
+
+            list.innerHTML = transactions.map(t => `
+                <div class="swipe-container" id="txn-${t.id}">
+                    <div class="swipe-bg edit">Edit</div>
+                    <div class="swipe-bg delete">Delete</div>
+                    <div class="txn-item">
+                        <div class="txn-info">
+                            <h4>${t.desc}</h4>
+                            <p>${t.user} ${t.category ? '• '+t.category : ''} • ${t.dateString || 'Today'}</p>
+                        </div>
+                        <div class="txn-amount ${t.type} ${t.amount < 0 ? 'negative' : ''}">
+                            ${t.type === 'burn' ? '-' : (t.amount < 0 ? '' : '+')}₱${Math.abs(t.amount).toLocaleString(undefined, {minimumFractionDigits: 2})}
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+
+            transactions.forEach(t => {
+                const el = document.getElementById(`txn-${t.id}`).querySelector('.txn-item');
+                attachSwipeListeners(el, t.id);
+            });
+        }
+        
+        function deleteTxn(id) {
+            showConfirm("Delete Item", "Cannot undo.", async () => {
+                try { await deleteDoc(doc(db, "rooms", currentRoom, "transactions", id)); showToast("Deleted"); } 
+                catch(e) { showToast("Error", "error"); }
+            });
+        }
+
+        function editTxn(id) {
+            const txn = allTransactions.find(t => t.id === id);
+            if (!txn) return;
+            document.getElementById('edit-id').value = id;
+            document.getElementById('inp-amount').value = txn.amount;
+            document.getElementById('inp-desc').value = txn.desc;
+            setMode(txn.type, true);
+            document.getElementById('inp-user').value = txn.user;
+            if (txn.type === 'burn') document.getElementById('inp-cat').value = txn.category;
+            if (txn.txnDate) {
+                document.getElementById('inp-date').value = txn.txnDate;
+            } else if (txn.dateString) {
+                const d = new Date(txn.dateString);
+                if(!isNaN(d)) document.getElementById('inp-date').valueAsDate = d;
+            }
+            document.getElementById('add-modal-overlay').classList.add('open');
+            const row = document.getElementById(`txn-${id}`).querySelector('.txn-item');
+            if(row) row.style.transform = 'translateX(0)';
+        }
+        
+        function attachSwipeListeners(element, id) {
+            let touchStartX = 0; let currentX = 0; const threshold = 80;
+            element.addEventListener('touchstart', (e) => { touchStartX = e.changedTouches[0].screenX; element.style.transition = 'none'; }, {passive: true});
+            element.addEventListener('touchmove', (e) => { 
+                currentX = e.changedTouches[0].screenX - touchStartX;
+                if (currentX < -150) currentX = -150; if (currentX > 150) currentX = 150;
+                element.style.transform = `translateX(${currentX}px)`;
+            }, {passive: true});
+            element.addEventListener('touchend', (e) => {
+                element.style.transition = 'transform 0.2s ease-out';
+                if (currentX < -threshold) element.style.transform = `translateX(-100px)`; 
+                else if (currentX > threshold) element.style.transform = `translateX(100px)`;
+                else element.style.transform = `translateX(0px)`;
+            });
+            const container = element.parentElement;
+            container.querySelector('.swipe-bg.delete').onclick = () => deleteTxn(id);
+            container.querySelector('.swipe-bg.edit').onclick = () => editTxn(id);
+        }
+    </script>
+</body>
+</html>
