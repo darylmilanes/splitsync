@@ -499,7 +499,6 @@ function renderDashboard() {
                 monthConfig.categories.forEach(c => {
                     if(c.isBill) {
                         const spent = tempCatStats[c.name] || 0;
-                        // UPDATED: Only consider pending if NO payment made (spent === 0)
                         if(spent === 0) {
                             pendingBills += (c.amount || 0);
                         }
@@ -573,8 +572,6 @@ function renderDashboard() {
             const stats = categoryStats[c.name];
             const spent = stats ? stats.spent : 0;
             const budget = c.amount || 0;
-            
-            // UPDATED: Only add full budget if nothing has been spent yet.
             if(spent === 0) {
                 totalPendingBills += budget;
             }
@@ -594,7 +591,7 @@ function renderDashboard() {
                 <div class="stat-card">
                     <div class="stat-label">Total Target</div>
                     <div class="stat-value" style="color:var(--text)">
-                        ₱${effectiveViewBudget.toLocaleString()}
+                        ₱${setBudget.toLocaleString()}
                         ${effectiveViewBudget > setBudget ? '<span style="font-size:10px; display:block; color:var(--warning)">(Over Limit)</span>' : ''}
                     </div>
                 </div>
