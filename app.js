@@ -3,7 +3,6 @@ import { getFirestore, collection, addDoc, onSnapshot, query, orderBy, serverTim
 
 // SERVICE WORKER REGISTRATION
 if ('serviceWorker' in navigator) {
-    // Guard against non-http protocols (e.g. blob: in preview environments)
     if (window.location.protocol.startsWith('http')) {
         window.addEventListener('load', () => {
             navigator.serviceWorker.register('./sw.js').catch(err => {
@@ -34,12 +33,11 @@ let allTransactions = [];
 let configData = {
     members: ['Me'],
     categories: [
-        {name: 'Food', amount: 0},
-        {name: 'Transport', amount: 0}, 
-        {name: 'Home', amount: 0}
+        {name: 'Food', amount: 0, isBill: false},
+        {name: 'Transport', amount: 0, isBill: false}
     ],
     budget: 0,
-    history: {} // Stores snapshots: { "2025-11": { budget: 30000, members: [...] } }
+    history: {} 
 };
 let confirmCallback = null;
 let statsView = 'month';
@@ -64,6 +62,7 @@ window.deleteTxn = deleteTxn;
 window.editTxn = editTxn;
 window.saveConfig = saveConfig;
 window.editCategory = editCategory;
+window.toggleBill = toggleBill;
 
 // INIT
 checkAuth();
@@ -157,7 +156,7 @@ async function loadConfig() {
         if (docSnap.exists()) {
             let data = docSnap.data();
             if (data.categories && data.categories.length > 0 && typeof data.categories[0] === 'string') {
-                data.categories = data.categories.map(c => ({ name: c, amount: 0 }));
+                data.categories = data.categories.map(c => ({ name: c, amount: 0, isBill: false }));
                 await updateDoc(docRef, { categories: data.categories });
             }
             configData = { ...configData, ...data };
@@ -179,13 +178,11 @@ function calculateTotalBudget() {
 async function saveConfig() {
     calculateTotalBudget();
     
-    // Save snapshot for CURRENT real-world month
     const now = new Date();
-    const historyKey = `${now.getFullYear()}-${now.getMonth()}`; // e.g. "2025-11"
+    const historyKey = `${now.getFullYear()}-${now.getMonth()}`;
     
     if (!configData.history) configData.history = {};
     
-    // Store deep copy of current settings into history for this month
     configData.history[historyKey] = {
         budget: configData.budget,
         members: [...configData.members],
@@ -195,7 +192,6 @@ async function saveConfig() {
     const docRef = doc(db, "rooms", currentRoom, "config", "main");
     try {
         await setDoc(docRef, configData);
-        renderSettingsLists();
         showToast("Settings saved");
     } catch (e) { showToast("Error saving", "error"); }
 }
@@ -215,12 +211,33 @@ function renderSettingsLists() {
     ).join('');
 
     const cList = document.getElementById('categories-list');
-    cList.innerHTML = configData.categories.map(c => 
-        `<div class="chip" onclick="editCategory('${c.name}')">
-            <span>${c.name} <span style="color:var(--text-muted); font-weight:400">(₱${c.amount.toLocaleString()})</span></span> 
-            <span class="del" onclick="event.stopPropagation(); removeItem('categories', '${c.name}')">&times;</span>
-        </div>`
-    ).join('');
+    
+    cList.innerHTML = configData.categories.map(c => {
+        const isChecked = c.isBill ? 'checked' : '';
+        const billStatus = c.isBill ? 'Bill' : 'Optional';
+        return `
+        <div class="chip" onclick="editCategory('${c.name}')">
+            <span style="flex:1">
+                ${c.name} 
+                <span style="color:var(--text-muted); font-weight:400">(₱${c.amount.toLocaleString()})</span>
+            </span>
+            <div style="display:flex; align-items:center; gap:10px;">
+                <label style="font-size:10px; color:var(--text-muted); display:flex; align-items:center; gap:4px; cursor:pointer" onclick="event.stopPropagation()">
+                    <input type="checkbox" onchange="toggleBill('${c.name}')" ${isChecked}> ${billStatus}
+                </label>
+                <span class="del" onclick="event.stopPropagation(); removeItem('categories', '${c.name}')">&times;</span>
+            </div>
+        </div>`;
+    }).join('');
+}
+
+function toggleBill(name) {
+    const cat = configData.categories.find(c => c.name === name);
+    if (cat) {
+        cat.isBill = !cat.isBill;
+        saveConfig();
+        renderSettingsLists();
+    }
 }
 
 function editCategory(name) {
@@ -242,6 +259,7 @@ function addItem(type) {
             configData.members.push(val);
             saveConfig();
             input.value = '';
+            renderSettingsLists();
         }
     } else {
         const nameInput = document.getElementById('new-cat-name');
@@ -253,14 +271,14 @@ function addItem(type) {
             if (editingCategoryName) {
                 const idx = configData.categories.findIndex(c => c.name === editingCategoryName);
                 if (idx !== -1) {
-                    configData.categories[idx] = { name: name, amount: amt };
+                    configData.categories[idx] = { ...configData.categories[idx], name: name, amount: amt };
                     saveConfig();
                 }
                 editingCategoryName = null;
                 document.getElementById('btn-add-cat').textContent = "Add";
             } else {
                 if (!configData.categories.find(c => c.name === name)) {
-                    configData.categories.push({ name: name, amount: amt });
+                    configData.categories.push({ name: name, amount: amt, isBill: false });
                     saveConfig();
                 } else {
                     showToast("Category exists", "error");
@@ -269,6 +287,7 @@ function addItem(type) {
             nameInput.value = '';
             amtInput.value = '';
             nameInput.focus();
+            renderSettingsLists(); 
         }
     }
 }
@@ -281,6 +300,7 @@ function removeItem(type, val) {
             configData[type] = configData[type].filter(item => item.name !== val);
         }
         saveConfig();
+        renderSettingsLists(); 
     });
 }
 
@@ -385,7 +405,7 @@ async function saveTransaction() {
 
 // --- DASHBOARD ---
 function openStats() {
-    viewDate = new Date(); // Reset to Now
+    viewDate = new Date(); 
     setStatsView('month');
     document.getElementById('stats-modal-overlay').classList.add('open');
 }
@@ -411,7 +431,6 @@ function renderDashboard() {
     const targetMonth = viewDate.getMonth();
     const targetYear = viewDate.getFullYear();
 
-    // Display
     const displayEl = document.getElementById('period-display');
     if (statsView === 'month') {
         displayEl.textContent = viewDate.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
@@ -419,14 +438,10 @@ function renderDashboard() {
         displayEl.textContent = targetYear;
     }
 
-    // --- 1. Calculate Carryover (Cumulative History) ---
-    // We iterate month by month from start of history to start of view period.
-    // For each month, we check if there was a historical config snapshot.
-    
+    // --- 1. HISTORY CARRYOVER ---
     const memberCarryover = {}; 
     configData.members.forEach(m => memberCarryover[m] = 0);
 
-    // Find Start of History
     let earliestDate = new Date();
     let hasHistory = false;
     
@@ -441,24 +456,23 @@ function renderDashboard() {
     });
 
     if (hasHistory) {
-        // Start from 1st day of earliest month
         let iterDate = new Date(earliestDate.getFullYear(), earliestDate.getMonth(), 1);
-        // Stop before the view period starts
         const viewStart = new Date(targetYear, statsView === 'month' ? targetMonth : 0, 1);
 
         while (iterDate < viewStart) {
             const iYear = iterDate.getFullYear();
             const iMonth = iterDate.getMonth();
             const historyKey = `${iYear}-${iMonth}`;
-
-            // Get Config for this specific past month
-            // Fallback to current config if no history exists for that month
             const monthConfig = (configData.history && configData.history[historyKey]) 
                                 ? configData.history[historyKey] 
                                 : configData;
 
-            // Calculate actual spend (Burn) for this month to determine adaptive target
             let monthBurn = 0;
+            const tempCatStats = {}; 
+
+            if(monthConfig.categories) {
+                monthConfig.categories.forEach(c => tempCatStats[c.name] = 0);
+            }
 
             allTransactions.forEach(t => {
                 let d = t.txnDate ? new Date(t.txnDate) : (t.timestamp ? t.timestamp.toDate() : new Date());
@@ -467,25 +481,36 @@ function renderDashboard() {
                     d = new Date(parts[0], parts[1]-1, parts[2]); 
                 }
 
-                // Check if transaction belongs to iterDate's month
                 if (d.getFullYear() === iYear && d.getMonth() === iMonth) {
                     if (t.type === 'burn') {
                         monthBurn += t.amount;
+                        if(tempCatStats[t.category] !== undefined) tempCatStats[t.category] += t.amount;
                     } else if (t.type === 'fuel') {
                         if (memberCarryover[t.user] !== undefined) {
-                            memberCarryover[t.user] += t.amount; // Add contribution
+                            memberCarryover[t.user] += t.amount; 
                         }
                     }
                 }
             });
 
-            // Adaptive Target Logic: Max(Set Budget, Actual Spent)
-            const effectiveBudget = Math.max(monthConfig.budget || 0, monthBurn);
+            // PENDING BILLS LOGIC (HISTORY)
+            let pendingBills = 0;
+            if(monthConfig.categories) {
+                monthConfig.categories.forEach(c => {
+                    if(c.isBill) {
+                        const spent = tempCatStats[c.name] || 0;
+                        // UPDATED: Only consider pending if NO payment made (spent === 0)
+                        if(spent === 0) {
+                            pendingBills += (c.amount || 0);
+                        }
+                    }
+                });
+            }
+
+            const effectiveBudget = Math.max(monthConfig.budget || 0, monthBurn + pendingBills);
             const memberCount = monthConfig.members ? monthConfig.members.length : 1;
             const targetPerPerson = effectiveBudget / memberCount;
 
-            // Subtract target from everyone
-            // Note: We use the members list from THAT month's config
             if (monthConfig.members) {
                 monthConfig.members.forEach(m => {
                     if (memberCarryover[m] !== undefined) {
@@ -493,14 +518,11 @@ function renderDashboard() {
                     }
                 });
             }
-
-            // Move to next month
             iterDate.setMonth(iterDate.getMonth() + 1);
         }
     }
 
-    // --- 2. Current View Data ---
-    // Filter transactions for the currently viewed period
+    // --- 2. CURRENT VIEW DATA ---
     const filtered = allTransactions.filter(t => {
         let tDate = new Date();
         if (t.txnDate) {
@@ -517,18 +539,15 @@ function renderDashboard() {
         }
     });
 
-    // Get Config for the VIEWED month
     const viewKey = `${targetYear}-${targetMonth}`;
     const viewConfig = (configData.history && configData.history[viewKey]) 
                        ? configData.history[viewKey] 
                        : configData;
 
-    // Aggregate Current Data
     let totalBurn = 0;
     const memberStats = {}; 
     const categoryStats = {};
 
-    // Initialize stats based on the VIEWED config members/categories
     const viewMembers = viewConfig.members || ['Me'];
     const viewCategories = viewConfig.categories || [];
 
@@ -540,7 +559,6 @@ function renderDashboard() {
             if (memberStats[t.user]) {
                 memberStats[t.user].fuel += t.amount;
             }
-            // If user not in config (e.g. left group), we still track totals but maybe not individual stats line
         } else {
             totalBurn += t.amount;
             if (!categoryStats[t.category]) categoryStats[t.category] = {spent: 0, budget: 0}; 
@@ -548,13 +566,27 @@ function renderDashboard() {
         }
     });
 
-    // Adaptive Target for Current View
+    // PENDING BILLS LOGIC (CURRENT)
+    let totalPendingBills = 0;
+    viewCategories.forEach(c => {
+        if(c.isBill) {
+            const stats = categoryStats[c.name];
+            const spent = stats ? stats.spent : 0;
+            const budget = c.amount || 0;
+            
+            // UPDATED: Only add full budget if nothing has been spent yet.
+            if(spent === 0) {
+                totalPendingBills += budget;
+            }
+        }
+    });
+
     const setBudget = viewConfig.budget || 0;
-    const effectiveViewBudget = Math.max(setBudget, totalBurn);
+    const effectiveViewBudget = Math.max(setBudget, totalBurn + totalPendingBills);
+    
     const viewMemberCount = viewMembers.length || 1;
     const baseTarget = effectiveViewBudget / viewMemberCount;
 
-    // Generate HTML
     let html = `
         <div class="dash-section" style="margin-top:0">
             <h4>Overview</h4>
@@ -567,8 +599,11 @@ function renderDashboard() {
                     </div>
                 </div>
                 <div class="stat-card">
-                    <div class="stat-label">Actual Spent</div>
-                    <div class="stat-value burn">₱${totalBurn.toLocaleString()}</div>
+                    <div class="stat-label">Spent + Pending Bills</div>
+                    <div class="stat-value burn">
+                        ₱${(totalBurn + totalPendingBills).toLocaleString()}
+                        ${totalPendingBills > 0 ? `<span style="font-size:10px; display:block; color:var(--text-muted)">Inc. ₱${totalPendingBills.toLocaleString()} unpaid bills</span>` : ''}
+                    </div>
                 </div>
             </div>
         </div>
@@ -588,13 +623,9 @@ function renderDashboard() {
                     ${viewMembers.map((name) => {
                         const stats = memberStats[name] || {fuel:0};
                         const carry = memberCarryover[name] || 0;
-                        
-                        // Adjusted Target: Base - Carryover
                         const adjustedTarget = baseTarget - carry;
-                        
                         const paid = stats.fuel;
                         const toGive = adjustedTarget - paid;
-                        
                         const targetClass = carry > 0 ? 'pos' : (carry < 0 ? 'warn' : '');
                         
                         let toGiveHtml = '';
@@ -633,6 +664,7 @@ function renderDashboard() {
                         const stats = categoryStats[c.name] || {spent:0};
                         const diff = (c.amount || 0) - stats.spent;
                         const diffClass = diff >= 0 ? 'pos' : 'neg';
+                        const isBill = c.isBill;
                         
                         let rowStyle = '';
                         if (stats.spent > (c.amount || 0)) {
@@ -640,10 +672,18 @@ function renderDashboard() {
                         } else if (stats.spent > 0 && stats.spent < (c.amount || 0)) {
                             rowStyle = 'background-color: var(--success-light)';
                         }
+                        
+                        // Highlight pending bills that are 0 spent
+                        if (isBill && stats.spent === 0 && (c.amount||0) > 0) {
+                             rowStyle = 'background-color: #FFF7ED;'; 
+                        }
 
                         return `
                             <tr style="${rowStyle}">
-                                <td>${c.name}</td>
+                                <td>
+                                    ${c.name}
+                                    ${isBill ? '<span style="font-size:10px; color:var(--text-muted); display:block;">(Bill)</span>' : ''}
+                                </td>
                                 <td class="money">₱${(c.amount||0).toLocaleString()}</td>
                                 <td class="money">₱${stats.spent.toLocaleString()}</td>
                                 <td class="money ${diffClass}">₱${diff.toLocaleString()}</td>
